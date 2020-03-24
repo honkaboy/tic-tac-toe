@@ -1,6 +1,9 @@
-#include <iostream>
-#include <vector>
+#include <algorithm>
+#include <exception>
 #include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <vector>
 
 using namespace std;
 
@@ -11,53 +14,72 @@ vector<string> split(const string &);
 #define DEBUG(x) cout << "Line: " << __LINE__ << ": " << x
 
 // Square NxN board, win with N consecutive.
+
+/// \brief Class to play Tic Tac Toe.
 class TicTacToe {
-public:
+ public:
   typedef int Player;
+
+  /// \brief Defines the result of a single move.
   enum class MoveResult { WIN, INVALID, DRAW, CONTINUE, NUM_MOVE_RESULT };
 
+  /// \brief Defines a location on the board.
   struct Location {
     Location(int row, int col) : row(row), col(col) {}
     const int row;
     const int col;
   };
 
+  /// \brief Constructor.
+  /// \param boardSize Board size for this game.  boardSize N -> NxN board.
+  /// \param numPlayers The number of players who will participate.
   TicTacToe(int boardSize, int numberPlayers);
 
-  ///
   /// \brief MakeMove Interface for the game playing system to add a new move to
   /// the game.
   /// \param player   Player making this move.
   /// \param location The selected location on the board.
   /// \return Result of the move, including the new game status such as Win,
   /// Invalid, etc.
-  ///
   MoveResult MakeMove(Player player, Location location);
 
+  /// \brief Convert a move result into an actual game result.
+  /// \param result The move result.
+  /// \param player The player making the move.
   int ConvertMoveResultToGameResult(MoveResult result, Player player);
 
+  /// \brief Print the current game board.
+  void Print();
+
   // Game status definitions.
-  const int CATS_GAME;
   static constexpr int NEXT_PLAYER = 0;
+  const int CATS_GAME;
 
-private:
-  /// Create a representation of the game state and any internal structures to
-  /// help determine win conditions. The implementation should easily extend to
-  /// different board sizes and run time should scale linearly (or better) with
-  /// N.
-
-  /// \brief Storage for board.
+ private:
   typedef vector<vector<Player>> board_t;
+
+  /// \brief Check if \p player just won playing at \location.
+  /// \param location \p player's most recent move.
+  /// \param player The player of this turn only.
+  /// \return MoveResult::WIN or MoveResult::CONTINUE.
+  ///
+  /// This function only returns WIN or CONTINUE. It assumes that only those two
+  /// possibilities are left / all error-check has already been performed.
+  MoveResult CheckForWin(Location location, Player player);
+
+  /// \brief Structure to store current game state.
   board_t board;
 
-  MoveResult CheckForWin(board_t board, Location location, Player player);
-
-  // Counter for the number of valid moves made in the game.
+  /// \brief Counter for the number of valid moves made in the game.
   unsigned int valid_move_count = 0;
 
   /// \brief Board size.
   const int board_size;
+
+  /// \brief The number of players.
   const int num_players;
+
+  /// \brief The maximum number of total moves by all players combined.
   const int max_valid_moves;
 
   // Board data definitions.
@@ -68,12 +90,14 @@ private:
 };
 
 TicTacToe::TicTacToe(int boardSize, int numberPlayers)
-    : CATS_GAME(numberPlayers + 1), board_size(boardSize),
-      num_players(numberPlayers), max_valid_moves(boardSize * boardSize) {
+    : CATS_GAME(numberPlayers + 1),
+      board_size(boardSize),
+      num_players(numberPlayers),
+      max_valid_moves(boardSize * boardSize) {
   // Initialize board to reflect that no players have played yet.
   const vector<int> initial_row(board_size, NO_MOVE);
   for (int i = 0; i < board_size; ++i) {
-    board[i] = initial_row;
+    board.push_back(initial_row);
   }
 
   // Set who must go first.  Player 1 goes first.  Note that players are
@@ -81,8 +105,16 @@ TicTacToe::TicTacToe(int boardSize, int numberPlayers)
   whose_turn = 1;
 }
 
-TicTacToe::MoveResult TicTacToe::CheckForWin(board_t board, Location location,
-                                             Player player) {
+void TicTacToe::Print() {
+  for (const auto row : board) {
+    for (const auto col : row) {
+      cout << col << " ";
+    }
+    cout << "\n";
+  }
+}
+
+TicTacToe::MoveResult TicTacToe::CheckForWin(Location location, Player player) {
   // Entire row, column, or diagonal must be filled for WIN. Iterate through
   // each for the given <location> to check. Once a bad entry is found, we know
   // that win isn't possible.
@@ -90,8 +122,8 @@ TicTacToe::MoveResult TicTacToe::CheckForWin(board_t board, Location location,
   bool col_win = true;
   // For a diagonal win, <location> must be on either main diagonal (forwards or
   // backwards).
-  bool diag_win = (location.row == location.col) ||
-                  (location.row == (board_size - location.col - 1));
+  bool diag_win_down = (location.row == location.col);
+  bool diag_win_up = (location.row == (board_size - location.col - 1));
   for (int idx = 0; idx < board_size; ++idx) {
     // Check if row win type is possible.
     if (row_win) {
@@ -102,11 +134,14 @@ TicTacToe::MoveResult TicTacToe::CheckForWin(board_t board, Location location,
       col_win = board[idx][location.col] == player;
     }
     // Check if diag..
-    if (diag_win) {
-      diag_win = board[idx][location.col] == player;
+    if (diag_win_down) {
+      diag_win_down = board[idx][idx] == player;
+    }
+    if (diag_win_up) {
+      diag_win_up = board[idx][board_size - idx - 1] == player;
     }
     // If no win type is still possible, we can return early.
-    if (!(row_win || col_win || diag_win)) {
+    if (!(row_win || col_win || diag_win_down || diag_win_up)) {
       return MoveResult::CONTINUE;
     }
   }
@@ -114,14 +149,6 @@ TicTacToe::MoveResult TicTacToe::CheckForWin(board_t board, Location location,
   return MoveResult::WIN;
 }
 
-///
-/// \brief MakeMove Interface for the game playing system to add a new move to
-/// the game.
-/// \param player   Player making this move.
-/// \param location The selected location on the board.
-/// \return Result of the move, including the new game status such as Win,
-/// Invalid, etc.
-///
 TicTacToe::MoveResult TicTacToe::MakeMove(Player player, Location location) {
   // Check for invalid player moves.
   // * Wrong player has attempted to move.
@@ -137,7 +164,7 @@ TicTacToe::MoveResult TicTacToe::MakeMove(Player player, Location location) {
   };
   bool off_board = IsOffBoard(location.row) || IsOffBoard(location.col);
   // * Move is in an already-filled location.
-  bool already_filled = board[location.row][location.col] != NO_MOVE;
+  bool already_filled = (board[location.row][location.col] != NO_MOVE);
 
   MoveResult move_result = MoveResult::NUM_MOVE_RESULT;
   if (wrong_player || off_board || already_filled) {
@@ -149,34 +176,36 @@ TicTacToe::MoveResult TicTacToe::MakeMove(Player player, Location location) {
     ++valid_move_count;
     board[location.row][location.col] = player;
     // Returns WIN or CONTINUE.
-    move_result = CheckForWin(board, location, player);
+    move_result = CheckForWin(location, player);
   }
 
-  // TODO error-check move_result != NUM_MOVE_RESULT.
+  if (move_result == MoveResult::NUM_MOVE_RESULT) {
+    throw std::logic_error(
+        "Invalid result NUM_MOVE_RESULT. Should never reach here.");
+  }
   return move_result;
 }
 
 int TicTacToe::ConvertMoveResultToGameResult(MoveResult result, Player player) {
-  // Process the result
   switch (result) {
-  case TicTacToe::MoveResult::WIN: {
-    return player;
+    case TicTacToe::MoveResult::WIN: {
+      return player;
+    }
+    case TicTacToe::MoveResult::DRAW: {
+      return CATS_GAME;
+    }
+    case TicTacToe::MoveResult::INVALID: {
+      return -player;
+    }
+    case TicTacToe::MoveResult::CONTINUE: {
+      return NEXT_PLAYER;
+    }
+    case TicTacToe::MoveResult::NUM_MOVE_RESULT: {
+      throw std::logic_error(
+          "Invalid result NUM_MOVE_RESULT. Should never reach here.");
+    }
   }
-  case TicTacToe::MoveResult::DRAW: {
-    return CATS_GAME;
-  }
-  case TicTacToe::MoveResult::INVALID: {
-    return -player;
-  }
-  case TicTacToe::MoveResult::CONTINUE: {
-    return NEXT_PLAYER;
-  }
-  case TicTacToe::MoveResult::NUM_MOVE_RESULT: {
-    // TODO std::throw?
-  }
-  }
-  // Should never reach here.
-  // TODO std::throw?
+  throw std::logic_error("Something went wrong. Should never reach here.");
   return 0;
 }
 
@@ -208,100 +237,43 @@ vector<int> playTicTacToe(TicTacToe &game, vector<vector<int>> moves) {
   return game_statuses;
 }
 
-int main()
-{
-  cout << "hello";
-    ifstream inputstream("sample_input.txt");
-    string boardSize_temp;
-    getline(inputstream, boardSize_temp);
+int main() {
+  int boardSize = 5;
+  int numberPlayers = 3;
+  vector<vector<int>> moves;
+  moves.push_back({1, 1, 0});
+  moves.push_back({2, 3, 3});
+  moves.push_back({3, 1, 3});
+  moves.push_back({1, 0, 2});
+  moves.push_back({2, 0, 0});
+  moves.push_back({3, 2, 2});
+  moves.push_back({1, 4, 1});
+  moves.push_back({2, 4, 2});
+  moves.push_back({3, 3, 1});
+  moves.push_back({1, 1, 2});
+  moves.push_back({2, 4, 3});
+  moves.push_back({3, 2, 1});
+  moves.push_back({1, 4, 4});
+  moves.push_back({2, 1, 1});
+  moves.push_back({3, 0, 4});
+  moves.push_back({1, 0, 1});
+  moves.push_back({2, 2, 3});
+  moves.push_back({3, 4, 0});
 
-    int boardSize = stoi(ltrim(rtrim(boardSize_temp)));
-  
-    string numberPlayers_temp;
-    getline(inputstream, numberPlayers_temp);
-  
-    int numberPlayers = stoi(ltrim(rtrim(numberPlayers_temp)));
+  TicTacToe game(boardSize, numberPlayers);
+  vector<int> result = playTicTacToe(game, moves);
 
-    string moves_rows_temp;
-    getline(inputstream, moves_rows_temp);
+  for (int i = 0; i < result.size(); i++) {
+    cout << result[i];
 
-    int moves_rows = stoi(ltrim(rtrim(moves_rows_temp)));
-
-    string moves_columns_temp;
-    getline(inputstream, moves_columns_temp);
-
-    int moves_columns = stoi(ltrim(rtrim(moves_columns_temp)));
-
-    vector<vector<int>> moves(moves_rows);
-
-    for (int i = 0; i < moves_rows; i++) {
-        moves[i].resize(moves_columns);
-
-        string moves_row_temp_temp;
-        getline(inputstream, moves_row_temp_temp);
-
-        vector<string> moves_row_temp = split(rtrim(moves_row_temp_temp));
-
-        for (int j = 0; j < moves_columns; j++) {
-            int moves_row_item = stoi(moves_row_temp[j]);
-
-            moves[i][j] = moves_row_item;
-        }
+    if (i != result.size() - 1) {
+      cout << "\n";
     }
+  }
 
-    TicTacToe game(boardSize, numberPlayers);
-    vector<int> result = playTicTacToe(game, moves);
+  cout << "\n";
 
-    for (int i = 0; i < result.size(); i++) {
-        cout << result[i];
+  game.Print();
 
-        if (i != result.size() - 1) {
-            cout << "\n";
-        }
-    }
-
-    cout << "\n";
-
-    // cout.close();
-
-    return 0;
-}
-
-string ltrim(const string &str) {
-    string s(str);
-
-    s.erase(
-        s.begin(),
-        find_if(s.begin(), s.end(), not1(ptr_fun<int, int>(isspace)))
-    );
-
-    return s;
-}
-
-string rtrim(const string &str) {
-    string s(str);
-
-    s.erase(
-        find_if(s.rbegin(), s.rend(), not1(ptr_fun<int, int>(isspace))).base(),
-        s.end()
-    );
-
-    return s;
-}
-
-vector<string> split(const string &str) {
-    vector<string> tokens;
-
-    string::size_type start = 0;
-    string::size_type end = 0;
-
-    while ((end = str.find(" ", start)) != string::npos) {
-        tokens.push_back(str.substr(start, end - start));
-
-        start = end + 1;
-    }
-
-    tokens.push_back(str.substr(start));
-
-    return tokens;
+  return 0;
 }
